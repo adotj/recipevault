@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { createRecipe, updateRecipe } from "@/app/actions/recipes";
 import { recipeFormSchema, type RecipeFormValues } from "@/lib/validations/recipe";
-import type { Recipe } from "@/types";
+import type { IngredientRow, Recipe } from "@/types";
 import { MEAL_TYPES } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,11 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RecipeImageUpload } from "@/components/recipes/recipe-image-upload";
+import {
+  BulkIngredientsPasteDialog,
+  BulkIngredientsPasteTriggerButton,
+  type BulkIngredientsApplyMode,
+} from "@/components/recipes/bulk-ingredients-paste-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -79,6 +84,7 @@ export function RecipeForm({
   const router = useRouter();
   /** When true, server runs Edamam (if configured) on save and overwrites macros. */
   const [autoNutrition, setAutoNutrition] = useState(true);
+  const [bulkPasteOpen, setBulkPasteOpen] = useState(false);
 
   const defaults = useMemo(() => recipeToFormDefaults(recipe), [recipe]);
 
@@ -93,6 +99,28 @@ export function RecipeForm({
   });
 
   const tagsInput = form.watch("tags")?.join(", ") ?? "";
+
+  function applyBulkIngredients(rows: IngredientRow[], mode: BulkIngredientsApplyMode) {
+    const cleaned = rows.filter((r) => r.name.trim() || r.quantity.trim());
+    if (cleaned.length === 0) {
+      toast.error("Couldn't parse any ingredients. Use one line per item.");
+      return;
+    }
+    const current = form.getValues("ingredients");
+    const next =
+      mode === "replace"
+        ? cleaned
+        : [...current.filter((r) => r.name.trim() || r.quantity.trim()), ...cleaned];
+    form.setValue("ingredients", next.length ? next : [{ name: "", quantity: "" }], {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    toast.success(
+      mode === "replace"
+        ? `Replaced with ${cleaned.length} ingredients`
+        : `Added ${cleaned.length} ingredients`
+    );
+  }
 
   async function onSubmit(values: RecipeFormValues) {
     const nutritionForSave = autoNutrition
@@ -204,20 +232,29 @@ export function RecipeForm({
           <div>
             <h2 className="text-lg font-semibold">Ingredients</h2>
             <p className="text-muted-foreground text-xs">
-              Natural language lines power Edamam nutrition parsing.
+              Natural language lines power Edamam nutrition parsing. Paste a whole list from an LLM with{" "}
+              <strong>Paste list</strong>.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => append({ name: "", quantity: "" })}
-          >
-            <Plus className="size-3.5" aria-hidden />
-            Add line
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <BulkIngredientsPasteTriggerButton onClick={() => setBulkPasteOpen(true)} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => append({ name: "", quantity: "" })}
+            >
+              <Plus className="size-3.5" aria-hidden />
+              Add line
+            </Button>
+          </div>
         </div>
+        <BulkIngredientsPasteDialog
+          open={bulkPasteOpen}
+          onOpenChange={setBulkPasteOpen}
+          onApply={(rows, mode) => applyBulkIngredients(rows, mode)}
+        />
         <ScrollArea className="max-h-[320px] rounded-lg border pr-3">
           <ul className="space-y-2 p-3">
             {fields.map((field, index) => (

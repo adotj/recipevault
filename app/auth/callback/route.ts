@@ -14,5 +14,10 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/?error=auth`);
+  const fallbackNext = searchParams.get("next") ?? "/";
+  const safe =
+    fallbackNext.startsWith("/") && !fallbackNext.startsWith("//")
+      ? fallbackNext
+      : "/";
+  return NextResponse.redirect(`${origin}/login?error=auth&next=${encodeURIComponent(safe)}`);
 }
