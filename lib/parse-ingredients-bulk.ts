@@ -4,8 +4,9 @@ import type { IngredientRow } from "@/types";
  * Split quantity (leading amount + optional unit) from ingredient name.
  * Handles LLM-style lines: bullets, numbering, "2 cups flour", "½ tsp salt", etc.
  */
+/* Group 1 = quantity (number, optional range, optional unit) + trailing spaces; group 2 = name */
 const QTY_WITH_UNIT = new RegExp(
-  "^((?:\\d+(?:\\.\\d+)?|\\d+\\s*/\\s*\\d+|[¼½¾⅓⅔])(?:\\s*[-\\u2013]\\s*(?:\\d+(?:\\.\\d+)?|\\d+\\s*/\\s*\\d+))?(?:\\s*(?:cups?|cup|tbsp|tsp|tablespoons?|teaspoons?|ounces?|oz|grams?|g|kg|mg|ml|lb|lbs|pounds?|cloves?|can|packages?|pkg|stick|sticks|slice|slices|bunch|sprigs?|medium|large|small|whole|pinch|dash|handful)\\b)?)\\s+)(.+)$",
+  "^((?:\\d+(?:\\.\\d+)?|\\d+\\s*/\\s*\\d+|[¼½¾⅓⅔])(?:\\s*[-\\u2013]\\s*(?:\\d+(?:\\.\\d+)?|\\d+\\s*/\\s*\\d+))?(?:\\s*(?:cups?|cup|tbsp|tsp|tablespoons?|teaspoons?|ounces?|oz|grams?|g|kg|mg|ml|lb|lbs|pounds?|cloves?|can|packages?|pkg|stick|sticks|slice|slices|bunch|sprigs?|medium|large|small|whole|pinch|dash|handful)\\b)?\\s+)(.+)$",
   "i"
 );
 
