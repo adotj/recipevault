@@ -99,17 +99,26 @@ export async function updateRecipe(
   try {
     const { supabase, userId } = await getUserId();
     let nutrition: NutritionFacts | null;
+    let usedAuto = false;
     if (recalculateNutrition) {
-      nutrition = await analyzeNutritionForRecipe(
+      const auto = await analyzeNutritionForRecipe(
         values.title,
         values.ingredients,
         values.servings
       );
+      if (auto) {
+        nutrition = auto;
+        usedAuto = true;
+      } else {
+        nutrition = values.nutrition ?? null;
+      }
     } else {
       nutrition = values.nutrition ?? null;
     }
 
-    const payload = toDbPayload(values, nutrition);
+    const payload = toDbPayload(values, nutrition) as Record<string, unknown>;
+    // If auto-recalc was requested but failed, don't wipe existing DB nutrition.
+    if (recalculateNutrition && !usedAuto) delete payload.nutrition;
     const { data, error } = await supabase
       .from("recipes")
       .update(payload)

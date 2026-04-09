@@ -113,20 +113,23 @@ export async function analyzeNutritionWithEdamam(
 
   const data = (await res.json()) as EdamamResponse;
   const facts = edamamResponseToPerServing(data, servings);
-  const sumMacros =
-    facts.calories +
-    facts.protein +
-    facts.carbs +
-    facts.fat +
-    facts.fiber +
-    facts.sugar +
-    facts.sodium;
-  if (sumMacros === 0) {
+  const nutrients =
+    data.totalNutrients && typeof data.totalNutrients === "object"
+      ? (data.totalNutrients as Record<string, unknown>)
+      : undefined;
+  const hasSomeSignal =
+    (typeof data.calories === "number" && !Number.isNaN(data.calories)) ||
+    (typeof data.calories === "string" && data.calories.trim() !== "") ||
+    (nutrients && Object.keys(nutrients).length > 0);
+
+  // If Edamam returned an empty-ish object, don't persist zeros.
+  if (!hasSomeSignal) {
     console.error(
-      "[edamam] Parsed all-zero nutrition from response; check API credentials (Nutrition Analysis app) and response shape.",
+      "[edamam] Response contained no calories/totalNutrients; check API keys and plan.",
       JSON.stringify(data).slice(0, 500)
     );
     return null;
   }
+
   return facts;
 }

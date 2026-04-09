@@ -35,6 +35,20 @@ const emptyNutrition = {
   sodium: 0,
 };
 
+function isEmptyNutrition(n: unknown): boolean {
+  if (!n || typeof n !== "object") return false;
+  const o = n as Record<string, unknown>;
+  return (
+    o.calories === 0 &&
+    o.protein === 0 &&
+    o.carbs === 0 &&
+    o.fat === 0 &&
+    o.fiber === 0 &&
+    o.sugar === 0 &&
+    o.sodium === 0
+  );
+}
+
 function recipeToFormDefaults(r?: Recipe | null): RecipeFormValues {
   if (!r) {
     return {
@@ -406,7 +420,9 @@ export function RecipeForm({
               onCheckedChange={(c) => {
                 setAutoNutrition(c);
                 if (c) {
-                  form.setValue("nutrition", null);
+                  // Only clear when it's the placeholder all-zeros object.
+                  const cur = form.getValues("nutrition");
+                  if (isEmptyNutrition(cur)) form.setValue("nutrition", null);
                 } else if (!form.getValues("nutrition")) {
                   form.setValue("nutrition", { ...emptyNutrition });
                 }
