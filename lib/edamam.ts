@@ -4,6 +4,11 @@ type EdamamResponse = {
   calories?: unknown;
   totalNutrients?: Record<string, unknown>;
   totalWeight?: number;
+  ingredients?: Array<{
+    parsed?: Array<{
+      nutrients?: Record<string, unknown>;
+    }>;
+  }>;
 };
 
 /** Edamam may return each tag as `{ quantity, ... }` or as an array of those objects. */
@@ -46,13 +51,47 @@ function readTotalCalories(
   return pickNutrient(nutrients, "ENERC_KCAL");
 }
 
+function sumParsedNutrients(
+  ingredients: EdamamResponse["ingredients"]
+): Record<string, unknown> {
+  const totals: Record<string, { label?: unknown; unit?: unknown; quantity: number }> = {};
+  for (const ing of ingredients ?? []) {
+    for (const p of ing.parsed ?? []) {
+      const n = p.nutrients;
+      if (!n || typeof n !== "object") continue;
+      for (const [key, entry] of Object.entries(n)) {
+        const q = nutrientEntryQuantity(entry);
+        if (q === 0) continue;
+        const label =
+          entry && typeof entry === "object" && "label" in entry
+            ? (entry as { label?: unknown }).label
+            : undefined;
+        const unit =
+          entry && typeof entry === "object" && "unit" in entry
+            ? (entry as { unit?: unknown }).unit
+            : undefined;
+        totals[key] = {
+          label: totals[key]?.label ?? label,
+          unit: totals[key]?.unit ?? unit,
+          quantity: (totals[key]?.quantity ?? 0) + q,
+        };
+      }
+    }
+  }
+  return totals;
+}
+
 /** Parses Edamam Nutrition Analysis API response into per-serving facts. */
 export function edamamResponseToPerServing(
   data: EdamamResponse,
   servings: number
 ): NutritionFacts {
   const safeServings = Math.max(1, servings);
-  const nutrients = data.totalNutrients ?? {};
+  const nutrientsFromTop = data.totalNutrients ?? {};
+  const nutrients =
+    Object.keys(nutrientsFromTop).length > 0
+      ? nutrientsFromTop
+      : sumParsedNutrients(data.ingredients);
   const kcal = readTotalCalories(data.calories, nutrients);
 
   return {
@@ -120,7 +159,8 @@ export async function analyzeNutritionWithEdamam(
   const hasSomeSignal =
     (typeof data.calories === "number" && !Number.isNaN(data.calories)) ||
     (typeof data.calories === "string" && data.calories.trim() !== "") ||
-    (nutrients && Object.keys(nutrients).length > 0);
+    (nutrients && Object.keys(nutrients).length > 0) ||
+    (data.ingredients && data.ingredients.length > 0);
 
   // If Edamam returned an empty-ish object, don't persist zeros.
   if (!hasSomeSignal) {
