@@ -17,7 +17,11 @@ async function getUserId() {
     data: { user },
     error,
   } = await supabase.auth.getUser();
-  if (error || !user) throw new Error("Unauthorized");
+  if (error || !user) {
+    throw new Error(
+      "Not signed in. Open /login to sign in (or enable Anonymous sign-ins in Supabase and refresh)."
+    );
+  }
   return { supabase, userId: user.id };
 }
 
@@ -52,15 +56,15 @@ export async function createRecipe(
 
   try {
     const { supabase, userId } = await getUserId();
-    let nutrition: NutritionFacts | null = values.nutrition ?? null;
-
+    let nutrition: NutritionFacts | null;
     if (recalculateNutrition) {
-      const auto = await analyzeNutritionForRecipe(
+      nutrition = await analyzeNutritionForRecipe(
         values.title,
         values.ingredients,
         values.servings
       );
-      if (auto) nutrition = auto;
+    } else {
+      nutrition = values.nutrition ?? null;
     }
 
     const payload = { ...toDbPayload(values, nutrition), user_id: userId };
@@ -94,15 +98,15 @@ export async function updateRecipe(
 
   try {
     const { supabase, userId } = await getUserId();
-    let nutrition: NutritionFacts | null = values.nutrition ?? null;
-
+    let nutrition: NutritionFacts | null;
     if (recalculateNutrition) {
-      const auto = await analyzeNutritionForRecipe(
+      nutrition = await analyzeNutritionForRecipe(
         values.title,
         values.ingredients,
         values.servings
       );
-      if (auto) nutrition = auto;
+    } else {
+      nutrition = values.nutrition ?? null;
     }
 
     const payload = toDbPayload(values, nutrition);

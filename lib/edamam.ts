@@ -1,24 +1,49 @@
 import type { IngredientRow, NutritionFacts } from "@/types";
 
-type EdamamNutrient = {
-  label: string;
-  quantity: number;
-  unit: string;
-};
-
 type EdamamResponse = {
-  calories?: number;
-  totalNutrients?: Record<string, EdamamNutrient>;
+  calories?: unknown;
+  totalNutrients?: Record<string, unknown>;
   totalWeight?: number;
 };
 
-function pick(
-  nutrients: Record<string, EdamamNutrient> | undefined,
+/** Edamam may return each tag as `{ quantity, ... }` or as an array of those objects. */
+function nutrientEntryQuantity(entry: unknown): number {
+  if (entry == null) return 0;
+  if (Array.isArray(entry)) {
+    let sum = 0;
+    for (const item of entry) {
+      sum += nutrientEntryQuantity(item);
+    }
+    return sum;
+  }
+  if (typeof entry === "object" && "quantity" in entry) {
+    const q = (entry as { quantity: unknown }).quantity;
+    if (typeof q === "number" && !Number.isNaN(q)) return q;
+    if (typeof q === "string") {
+      const n = Number(q);
+      return Number.isNaN(n) ? 0 : n;
+    }
+  }
+  return 0;
+}
+
+function pickNutrient(
+  nutrients: Record<string, unknown> | undefined,
   key: string
 ): number {
-  const n = nutrients?.[key];
-  if (!n || typeof n.quantity !== "number") return 0;
-  return n.quantity;
+  return nutrientEntryQuantity(nutrients?.[key]);
+}
+
+function readTotalCalories(
+  raw: unknown,
+  nutrients: Record<string, unknown> | undefined
+): number {
+  if (typeof raw === "number" && !Number.isNaN(raw)) return raw;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    if (!Number.isNaN(n)) return n;
+  }
+  return pickNutrient(nutrients, "ENERC_KCAL");
 }
 
 /** Parses Edamam Nutrition Analysis API response into per-serving facts. */
@@ -28,19 +53,20 @@ export function edamamResponseToPerServing(
 ): NutritionFacts {
   const safeServings = Math.max(1, servings);
   const nutrients = data.totalNutrients ?? {};
-  const kcal =
-    typeof data.calories === "number"
-      ? data.calories
-      : pick(nutrients, "ENERC_KCAL");
+  const kcal = readTotalCalories(data.calories, nutrients);
 
   return {
     calories: Math.round(kcal / safeServings),
-    protein: Math.round((pick(nutrients, "PROCNT") / safeServings) * 10) / 10,
-    carbs: Math.round((pick(nutrients, "CHOCDF") / safeServings) * 10) / 10,
-    fat: Math.round((pick(nutrients, "FAT") / safeServings) * 10) / 10,
-    fiber: Math.round((pick(nutrients, "FIBTG") / safeServings) * 10) / 10,
-    sugar: Math.round((pick(nutrients, "SUGAR") / safeServings) * 10) / 10,
-    sodium: Math.round(pick(nutrients, "NA") / safeServings),
+    protein:
+      Math.round((pickNutrient(nutrients, "PROCNT") / safeServings) * 10) / 10,
+    carbs:
+      Math.round((pickNutrient(nutrients, "CHOCDF") / safeServings) * 10) / 10,
+    fat: Math.round((pickNutrient(nutrients, "FAT") / safeServings) * 10) / 10,
+    fiber:
+      Math.round((pickNutrient(nutrients, "FIBTG") / safeServings) * 10) / 10,
+    sugar:
+      Math.round((pickNutrient(nutrients, "SUGAR") / safeServings) * 10) / 10,
+    sodium: Math.round(pickNutrient(nutrients, "NA") / safeServings),
   };
 }
 
@@ -86,5 +112,21 @@ export async function analyzeNutritionWithEdamam(
   }
 
   const data = (await res.json()) as EdamamResponse;
-  return edamamResponseToPerServing(data, servings);
+  const facts = edamamResponseToPerServing(data, servings);
+  const sumMacros =
+    facts.calories +
+    facts.protein +
+    facts.carbs +
+    facts.fat +
+    facts.fiber +
+    facts.sugar +
+    facts.sodium;
+  if (sumMacros === 0) {
+    console.error(
+      "[edamam] Parsed all-zero nutrition from response; check API credentials (Nutrition Analysis app) and response shape.",
+      JSON.stringify(data).slice(0, 500)
+    );
+    return null;
+  }
+  return facts;
 }

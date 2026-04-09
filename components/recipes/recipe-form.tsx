@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { RecipeImageUpload } from "@/components/recipes/recipe-image-upload";
 import {
   BulkIngredientsPasteDialog,
@@ -255,7 +254,10 @@ export function RecipeForm({
           onOpenChange={setBulkPasteOpen}
           onApply={(rows, mode) => applyBulkIngredients(rows, mode)}
         />
-        <ScrollArea className="max-h-[320px] rounded-lg border pr-3">
+        {/* Native overflow: Base UI ScrollArea + max-h-only broke h-full on the viewport, so long lists painted over the next section. */}
+        <div
+          className="max-h-[min(420px,55dvh)] overflow-y-auto overflow-x-hidden overscroll-y-contain rounded-lg border [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+        >
           <ul className="space-y-2 p-3">
             {fields.map((field, index) => (
               <li key={field.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
@@ -293,7 +295,7 @@ export function RecipeForm({
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </div>
       </section>
 
       <section className="space-y-2">
@@ -403,7 +405,9 @@ export function RecipeForm({
               checked={autoNutrition}
               onCheckedChange={(c) => {
                 setAutoNutrition(c);
-                if (!c && !form.getValues("nutrition")) {
+                if (c) {
+                  form.setValue("nutrition", null);
+                } else if (!form.getValues("nutrition")) {
                   form.setValue("nutrition", { ...emptyNutrition });
                 }
               }}
