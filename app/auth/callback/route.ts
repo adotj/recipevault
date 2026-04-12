@@ -19,5 +19,5 @@ export async function GET(request: Request) {
     fallbackNext.startsWith("/") && !fallbackNext.startsWith("//")
       ? fallbackNext
       : "/";
-  return NextResponse.redirect(`${origin}/login?error=auth&next=${encodeURIComponent(safe)}`);
+  return NextResponse.redirect(`${origin}/gate?error=auth&next=${encodeURIComponent(safe)}`);
 }

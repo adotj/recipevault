@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Upload, X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadRecipeImageForm } from "@/app/actions/recipe-images";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -23,25 +23,17 @@ export function RecipeImageUpload({
     if (!file) return;
     setUploading(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Sign in to upload images.");
+      const fd = new FormData();
+      fd.set("file", file);
+      const result = await uploadRecipeImageForm(fd);
+      if (result.error) {
+        toast.error(result.error);
         return;
       }
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from("recipe-images")
-        .upload(path, file, { upsert: true });
-      if (error) throw error;
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("recipe-images").getPublicUrl(path);
-      onChange(publicUrl);
-      toast.success("Image uploaded");
+      if (result.url) {
+        onChange(result.url);
+        toast.success("Image uploaded");
+      }
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : "Upload failed");

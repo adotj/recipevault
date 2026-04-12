@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { getHouseholdContext } from "@/lib/vault-household";
 import { mapRecipeRow } from "@/lib/mappers";
 import { analyzeNutritionForRecipe } from "@/lib/nutrition-analyze";
 import {
@@ -11,18 +11,12 @@ import {
 } from "@/lib/validations/recipe";
 import type { NutritionFacts, Recipe } from "@/types";
 
-async function getUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-  if (error || !user) {
-    throw new Error(
-      "Not signed in. Open /login to sign in (or enable Anonymous sign-ins in Supabase and refresh)."
-    );
+async function requireHousehold() {
+  const ctx = await getHouseholdContext();
+  if (!ctx) {
+    throw new Error("Vault session missing. Open /gate and enter the household passphrase.");
   }
-  return { supabase, userId: user.id };
+  return ctx;
 }
 
 function toDbPayload(values: RecipeFormValues, nutrition: NutritionFacts | null) {
@@ -55,7 +49,7 @@ export async function createRecipe(
   const { recalculateNutrition = true } = options;
 
   try {
-    const { supabase, userId } = await getUserId();
+    const { supabase, userId } = await requireHousehold();
     let nutrition: NutritionFacts | null;
     if (recalculateNutrition) {
       nutrition = await analyzeNutritionForRecipe(
@@ -97,7 +91,7 @@ export async function updateRecipe(
   const { recalculateNutrition = true } = options;
 
   try {
-    const { supabase, userId } = await getUserId();
+    const { supabase, userId } = await requireHousehold();
     let nutrition: NutritionFacts | null;
     let usedAuto = false;
     if (recalculateNutrition) {
@@ -139,7 +133,7 @@ export async function updateRecipe(
 }
 
 export async function deleteRecipe(id: string) {
-  const { supabase, userId } = await getUserId();
+  const { supabase, userId } = await requireHousehold();
   const { error } = await supabase
     .from("recipes")
     .delete()
@@ -151,7 +145,7 @@ export async function deleteRecipe(id: string) {
 }
 
 export async function duplicateRecipe(id: string) {
-  const { supabase, userId } = await getUserId();
+  const { supabase, userId } = await requireHousehold();
   const { data: src, error: fetchErr } = await supabase
     .from("recipes")
     .select("*")
@@ -193,7 +187,7 @@ export async function duplicateRecipe(id: string) {
 }
 
 export async function toggleFavorite(id: string, favorite: boolean) {
-  const { supabase, userId } = await getUserId();
+  const { supabase, userId } = await requireHousehold();
   const { error } = await supabase
     .from("recipes")
     .update({ favorite })
@@ -206,16 +200,13 @@ export async function toggleFavorite(id: string, favorite: boolean) {
 }
 
 export async function fetchRecipesForUser(): Promise<Recipe[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const ctx = await getHouseholdContext();
+  if (!ctx) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from("recipes")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -226,17 +217,14 @@ export async function fetchRecipesForUser(): Promise<Recipe[]> {
 }
 
 export async function fetchRecipeById(id: string): Promise<Recipe | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const ctx = await getHouseholdContext();
+  if (!ctx) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from("recipes")
     .select("*")
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .maybeSingle();
 
   if (error || !data) return null;
@@ -286,7 +274,7 @@ export async function importRecipesFromJson(json: string) {
   if (!bundle.success) {
     return { imported: 0, error: "Invalid import format" };
   }
-  const { supabase, userId } = await getUserId();
+  const { supabase, userId } = await requireHousehold();
   let count = 0;
   for (const item of bundle.data.recipes) {
     const r = recipeFormSchema.safeParse(item);

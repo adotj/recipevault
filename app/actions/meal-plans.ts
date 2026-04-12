@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { getHouseholdContext } from "@/lib/vault-household";
 import { mealPlanUpdateSchema } from "@/lib/validations/recipe";
 import type { MealPlanRow } from "@/types";
 
@@ -25,16 +25,13 @@ function mapPlanRow(row: Record<string, unknown>): MealPlanRow {
 }
 
 export async function fetchMealPlansRange(startIso: string, endIso: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
+  const ctx = await getHouseholdContext();
+  if (!ctx) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from("meal_plans")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .gte("plan_date", startIso)
     .lte("plan_date", endIso);
 
@@ -49,11 +46,8 @@ export async function upsertMealPlan(raw: unknown) {
   const parsed = mealPlanUpdateSchema.safeParse(raw);
   if (!parsed.success) return { error: "Invalid meal plan" };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const ctx = await getHouseholdContext();
+  if (!ctx) return { error: "Unauthorized" };
 
   const {
     plan_date,
@@ -64,15 +58,15 @@ export async function upsertMealPlan(raw: unknown) {
     dessert_recipe_id,
   } = parsed.data;
 
-  const existing = await supabase
+  const existing = await ctx.supabase
     .from("meal_plans")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .eq("plan_date", plan_date)
     .maybeSingle();
 
   const payload = {
-    user_id: user.id,
+    user_id: ctx.userId,
     plan_date,
     breakfast_recipe_id: breakfast_recipe_id ?? null,
     lunch_recipe_id: lunch_recipe_id ?? null,
@@ -82,7 +76,7 @@ export async function upsertMealPlan(raw: unknown) {
   };
 
   if (existing.data?.id) {
-    const { data, error } = await supabase
+    const { data, error } = await ctx.supabase
       .from("meal_plans")
       .update(payload)
       .eq("id", existing.data.id)
@@ -93,7 +87,7 @@ export async function upsertMealPlan(raw: unknown) {
     return { plan: mapPlanRow(data as Record<string, unknown>) };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await ctx.supabase
     .from("meal_plans")
     .insert(payload)
     .select()
@@ -104,13 +98,10 @@ export async function upsertMealPlan(raw: unknown) {
 }
 
 export async function clearMealPlanDay(plan_date: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const ctx = await getHouseholdContext();
+  if (!ctx) return { error: "Unauthorized" };
 
-  const { error } = await supabase
+  const { error } = await ctx.supabase
     .from("meal_plans")
     .update({
       breakfast_recipe_id: null,
@@ -119,7 +110,7 @@ export async function clearMealPlanDay(plan_date: string) {
       snack_recipe_id: null,
       dessert_recipe_id: null,
     })
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .eq("plan_date", plan_date);
 
   if (error) return { error: error.message };
@@ -128,13 +119,10 @@ export async function clearMealPlanDay(plan_date: string) {
 }
 
 export async function clearMealPlanWeek(startIso: string, endIso: string) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const ctx = await getHouseholdContext();
+  if (!ctx) return { error: "Unauthorized" };
 
-  const { error } = await supabase
+  const { error } = await ctx.supabase
     .from("meal_plans")
     .update({
       breakfast_recipe_id: null,
@@ -143,7 +131,7 @@ export async function clearMealPlanWeek(startIso: string, endIso: string) {
       snack_recipe_id: null,
       dessert_recipe_id: null,
     })
-    .eq("user_id", user.id)
+    .eq("user_id", ctx.userId)
     .gte("plan_date", startIso)
     .lte("plan_date", endIso);
 

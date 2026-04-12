@@ -12,7 +12,6 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 const links = [
@@ -21,20 +20,13 @@ const links = [
   { href: "/planner", label: "Meal planner", icon: CalendarDays },
 ];
 
-export function AppSidebar({
-  className,
-  userEmail,
-}: {
-  className?: string;
-  userEmail?: string | null;
-}) {
+export function AppSidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
   async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    await fetch("/api/vault-auth", { method: "DELETE" });
+    router.push("/gate");
     router.refresh();
   }
 
@@ -80,12 +72,7 @@ export function AppSidebar({
           })}
         </nav>
       </ScrollArea>
-      <div className="border-sidebar-border space-y-2 border-t p-3">
-        {userEmail ? (
-          <p className="text-sidebar-foreground/70 truncate px-1 text-xs" title={userEmail}>
-            {userEmail}
-          </p>
-        ) : null}
+      <div className="border-sidebar-border border-t p-3">
         <Button
           variant="ghost"
           className="text-sidebar-foreground/80 w-full justify-start gap-2"
@@ -93,7 +80,7 @@ export function AppSidebar({
           onClick={() => void signOut()}
         >
           <LogOut className="size-4" aria-hidden />
-          Sign out
+          Lock vault
         </Button>
       </div>
     </aside>
